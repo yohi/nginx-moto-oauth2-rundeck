@@ -1,26 +1,26 @@
 # OAuth Docker Compose環境 with AWS Cognito & Rundeck
 
-OAuth2Proxy、Nginx、Moto（モックAWS）、Rundeckを統合したDocker Compose環境です。完全なOAuth認証フローをローカルでテストできる包括的な認証基盤システムです。
+Nginx、Cognito Local、Backend Server、Rundeckを統合したDocker Compose環境です。完全なOAuth認証フローをローカルでテストできる包括的な認証基盤システムです。
 
 ## 🎯 概要
 
 この環境は以下のコンポーネントから構成された**エンタープライズレベルの認証基盤**です：
 
 - **Nginx**: リバースプロキシ・認証ゲートウェイ（ポート9000/9443）
-- **OAuth2Proxy**: OAuth認証サービス（ポート4180）
-- **Moto**: モックAWSサービス（Cognito、S3、DynamoDB等、ポート5000）
+
+- **Cognito Local**: AWS Cognitoエミュレーター（ユーザープール・認証機能、ポート9229）
 - **Backend**: 認証対応Node.jsアプリケーション（ポート8090）
 - **Rundeck**: ワークフロー管理システム（ポート4440）
-- **Cognito Setup**: AWS Cognito自動初期化サービス
+
 
 ## 🏗️ アーキテクチャ
 
 ```
-ユーザー → Nginx (9000) → 認証チェック → OAuth2Proxy/Cognito
+ ユーザー → Nginx (9000) → 認証チェック → Backend Server (8090)
                 ↓                              ↓
-           認証OK → Backend (8090)          Moto AWS (5000)
-                ↓                              ↓
-           認証OK → Rundeck (4440)         Cognito User Pool
+           認証OK → Rundeck HA (4440/4441)    Cognito Local (9229)
+                                              ↓
+                                        Cognito Hosted UI
 ```
 
 ### 認証フロー
