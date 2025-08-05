@@ -66,7 +66,7 @@ services:
       retries: 3
 
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
@@ -123,6 +123,11 @@ services:
       - RUNDECK_PREAUTH_REDIRECT_LOGOUT=http://localhost:9000/oauth2/sign_out
       - RUNDECK_PREAUTH_USER_FIRST_NAME_HEADER=X-Auth-Request-Given-Name
       - RUNDECK_PREAUTH_USER_LAST_NAME_HEADER=X-Auth-Request-Family-Name
+      # アセット配信の根本的解決設定
+      - GRAILS_ASSETS_MINIFIED=false
+      - GRAILS_ASSETS_PLUGIN_BOOTSTRAP_ENABLED=false
+      - RUNDECK_STATIC_ASSETS_PATH=/home/rundeck/user-assets
+      - RUNDECK_GRAILS_SERVER_URL=http://localhost:9000/rundeck
     volumes:
       - rundeck-data:/home/rundeck/server/data
       - ./rundeck/config:/home/rundeck/server/config
@@ -132,7 +137,7 @@ services:
       - oauth-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4440/api/14/system/info"]
+      test: ["CMD", "curl", "-f", "http://localhost:4440/"]
       interval: 30s
       timeout: 10s
       retries: 5

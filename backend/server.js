@@ -36,7 +36,7 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'cognito-oauth-session-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { 
+  cookie: {
     secure: false, // HTTP環境用（本番ではtrueに設定）
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24時間
@@ -48,14 +48,14 @@ app.use((req, res, next) => {
   // セッション認証が有効な場合、Rundeckで使用するヘッダーを設定
   if (req.session.authenticated && req.session.user) {
     const user = req.session.user;
-    
+
     // Rundeckで使用する認証ヘッダーを設定
     req.headers['x-auth-request-email'] = user.attributes?.email || 'unknown';
     req.headers['x-auth-request-user'] = user.attributes?.email || 'unknown';
     req.headers['x-auth-request-given-name'] = user.attributes?.given_name || 'User';
     req.headers['x-auth-request-family-name'] = user.attributes?.family_name || 'Name';
     req.headers['x-auth-request-roles'] = 'user,admin'; // デフォルトロール
-    
+
     // レスポンスヘッダーにも設定（プロキシ用）
     res.set({
       'X-Auth-Request-Email': req.headers['x-auth-request-email'],
@@ -65,7 +65,7 @@ app.use((req, res, next) => {
       'X-Auth-Request-Roles': req.headers['x-auth-request-roles']
     });
   }
-  
+
   console.log('=== 認証ヘッダー情報 ===');
   console.log('X-Auth-Request-User:', req.headers['x-auth-request-user']);
   console.log('X-Auth-Request-Email:', req.headers['x-auth-request-email']);
@@ -80,10 +80,10 @@ app.get('/', (req, res) => {
   const sessionUser = req.session.user;
   const headerUser = req.headers['x-auth-request-user'] || 'unknown';
   const headerEmail = req.headers['x-auth-request-email'] || 'unknown';
-  
+
   const authenticated = req.session.authenticated || !!(headerUser && headerEmail && headerUser !== 'unknown');
   const user = sessionUser || { name: headerUser, email: headerEmail };
-  
+
   res.json({
     message: 'OAuth認証環境のサンプルバックエンドアプリケーション',
     user: user,
@@ -117,9 +117,9 @@ app.get('/user', (req, res) => {
   const sessionUser = req.session.user;
   const headerUser = req.headers['x-auth-request-user'];
   const headerEmail = req.headers['x-auth-request-email'];
-  
+
   const authenticated = req.session.authenticated || !!(headerUser && headerEmail && headerUser !== 'unknown');
-  
+
   if (!authenticated) {
     return res.status(401).json({
       error: '認証が必要です',
@@ -127,9 +127,9 @@ app.get('/user', (req, res) => {
       oauth2_login: '/oauth2/start'
     });
   }
-  
+
   const user = sessionUser || { name: headerUser, email: headerEmail };
-  
+
   res.json({
     user: {
       ...user,
@@ -150,10 +150,10 @@ app.get('/aws/status', async (req, res) => {
   try {
     // S3サービスの確認
     const s3Response = await s3.listBuckets().promise();
-    
+
     // DynamoDBサービスの確認
     const dynamoResponse = await dynamodb.listTables().promise();
-    
+
     res.json({
       aws_status: 'connected',
       endpoint: process.env.AWS_ENDPOINT_URL || 'http://moto:5000',
@@ -182,36 +182,36 @@ app.get('/aws/status', async (req, res) => {
 // S3デモエンドポイント
 app.get('/aws/s3', async (req, res) => {
   const bucketName = 'demo-bucket-' + Date.now();
-  
+
   try {
     // バケット作成
     await s3.createBucket({ Bucket: bucketName }).promise();
     console.log(`S3バケット作成: ${bucketName}`);
-    
+
     // テストオブジェクトの作成
     const testObject = {
       message: 'OAuth認証環境からのテストオブジェクト',
       user: req.headers['x-auth-request-user'] || 'unknown',
       timestamp: new Date().toISOString()
     };
-    
+
     await s3.putObject({
       Bucket: bucketName,
       Key: 'test-object.json',
       Body: JSON.stringify(testObject, null, 2),
       ContentType: 'application/json'
     }).promise();
-    
+
     // オブジェクト一覧取得
     const objects = await s3.listObjectsV2({ Bucket: bucketName }).promise();
-    
+
     res.json({
       action: 'S3デモ実行完了',
       bucket: bucketName,
       objects: objects.Contents,
       test_object: testObject
     });
-    
+
   } catch (error) {
     console.error('S3デモエラー:', error);
     res.status(500).json({
@@ -224,7 +224,7 @@ app.get('/aws/s3', async (req, res) => {
 // DynamoDBデモエンドポイント
 app.get('/aws/dynamodb', async (req, res) => {
   const tableName = 'demo-table-' + Date.now();
-  
+
   try {
     // テーブル作成
     const tableParams = {
@@ -237,16 +237,16 @@ app.get('/aws/dynamodb', async (req, res) => {
       ],
       BillingMode: 'PAY_PER_REQUEST'
     };
-    
+
     await dynamodb.createTable(tableParams).promise();
     console.log(`DynamoDBテーブル作成: ${tableName}`);
-    
+
     // 少し待機（テーブル作成完了を待つ）
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // DynamoDB DocumentClientでアイテム操作
     const docClient = new AWS.DynamoDB.DocumentClient();
-    
+
     // テストアイテムの挿入
     const testItem = {
       id: 'test-id-' + Date.now(),
@@ -254,25 +254,25 @@ app.get('/aws/dynamodb', async (req, res) => {
       user: req.headers['x-auth-request-user'] || 'unknown',
       timestamp: new Date().toISOString()
     };
-    
+
     await docClient.put({
       TableName: tableName,
       Item: testItem
     }).promise();
-    
+
     // アイテム取得
     const result = await docClient.get({
       TableName: tableName,
       Key: { id: testItem.id }
     }).promise();
-    
+
     res.json({
       action: 'DynamoDBデモ実行完了',
       table: tableName,
       inserted_item: testItem,
       retrieved_item: result.Item
     });
-    
+
   } catch (error) {
     console.error('DynamoDBデモエラー:', error);
     res.status(500).json({
@@ -285,17 +285,17 @@ app.get('/aws/dynamodb', async (req, res) => {
 // Cognito認証テストエンドポイント
 app.post('/auth/login', async (req, res) => {
   const { username, password, oauth2_flow } = req.body;
-  
+
   if (!username || !password) {
     return res.status(400).json({
       error: 'ユーザー名とパスワードが必要です',
       required: ['username', 'password']
     });
   }
-  
+
   try {
     const result = await authenticateUser(username, password);
-    
+
     if (result.success) {
       // アクセストークンがある場合、ユーザー情報も取得
       let userInfo = null;
@@ -306,14 +306,14 @@ app.post('/auth/login', async (req, res) => {
           console.warn('ユーザー情報取得失敗:', error.message);
         }
       }
-      
+
       // OAuth2フローの場合、セッションに認証結果を保存
       if (oauth2_flow === 'true') {
         req.session.authResult = {
           tokens: result.tokens,
           userInfo: userInfo
         };
-        
+
         // OAuth2 callbackにリダイレクト
         const state = req.session.oauth2State;
         res.json({
@@ -337,7 +337,7 @@ app.post('/auth/login', async (req, res) => {
         error: result.error
       });
     }
-    
+
   } catch (error) {
     console.error('認証処理エラー:', error);
     res.status(500).json({
@@ -352,7 +352,7 @@ app.get('/auth/config', async (req, res) => {
   try {
     const userPools = await listUserPools();
     const clients = await listUserPoolClients(USER_POOL_ID);
-    
+
     res.json({
       cognito_config: {
         user_pool_id: USER_POOL_ID,
@@ -380,13 +380,13 @@ app.get('/auth/config', async (req, res) => {
 app.get('/oauth2/start', (req, res) => {
   const state = Math.random().toString(36).substring(2, 15);
   const redirectUri = req.query.rd || '/';
-  
+
   // セッションにstateとリダイレクト先を保存
   req.session.oauth2State = state;
   req.session.redirectAfterAuth = redirectUri;
-  
+
   console.log('OAuth2認証開始 - State:', state, 'Redirect:', redirectUri);
-  
+
   // 認証フォームページにリダイレクト（Moto Cognitoの制限のため）
   res.redirect(`/auth/login-form?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`);
 });
@@ -394,9 +394,9 @@ app.get('/oauth2/start', (req, res) => {
 // OAuth2 Callback処理
 app.get('/oauth2/callback', async (req, res) => {
   const { code, state } = req.query;
-  
+
   console.log('OAuth2 Callback:', { code, state, sessionState: req.session.oauth2State });
-  
+
   // State確認
   if (state && req.session.oauth2State && state !== req.session.oauth2State) {
     return res.status(400).json({
@@ -405,25 +405,25 @@ app.get('/oauth2/callback', async (req, res) => {
       expected: req.session.oauth2State
     });
   }
-  
+
   try {
     // Moto Cognitoの制限により、直接認証結果を処理
     if (req.session.authResult) {
       const authResult = req.session.authResult;
-      
+
       // セッションに認証情報を保存
       req.session.authenticated = true;
       req.session.user = authResult.userInfo;
       req.session.tokens = authResult.tokens;
-      
+
       // 認証後のリダイレクト先を取得
       const redirectTo = req.session.redirectAfterAuth || '/';
-      
+
       // セッション情報をクリーンアップ
       delete req.session.oauth2State;
       delete req.session.authResult;
       delete req.session.redirectAfterAuth;
-      
+
       console.log('OAuth2認証成功 - リダイレクト先:', redirectTo);
       res.redirect(redirectTo);
     } else {
@@ -432,7 +432,7 @@ app.get('/oauth2/callback', async (req, res) => {
         message: 'Please complete the authentication process first'
       });
     }
-    
+
   } catch (error) {
     console.error('OAuth2 Callback エラー:', error);
     res.status(500).json({
@@ -456,7 +456,7 @@ app.get('/oauth2/sign_out', (req, res) => {
 app.get('/auth/verify', (req, res) => {
   if (req.session.authenticated && req.session.user) {
     const user = req.session.user;
-    
+
     // 認証済みの場合、認証ヘッダーをレスポンスに設定
     res.set({
       'X-Auth-Request-Email': user.attributes?.email || 'unknown',
@@ -465,7 +465,7 @@ app.get('/auth/verify', (req, res) => {
       'X-Auth-Request-Family-Name': user.attributes?.family_name || 'Name',
       'X-Auth-Request-Roles': 'user,admin'
     });
-    
+
     res.status(200).json({
       authenticated: true,
       user: user.attributes?.email
@@ -481,16 +481,16 @@ app.get('/auth/verify', (req, res) => {
 // テスト用セッション設定エンドポイント
 app.post('/auth/test-session', async (req, res) => {
   const { username, password } = req.body;
-  
+
   if (!username || !password) {
     return res.status(400).json({
       error: 'ユーザー名とパスワードが必要です'
     });
   }
-  
+
   try {
     const result = await authenticateUser(username, password);
-    
+
     if (result.success) {
       // ユーザー情報を取得
       let userInfo = null;
@@ -501,14 +501,14 @@ app.post('/auth/test-session', async (req, res) => {
           console.warn('ユーザー情報取得失敗:', error.message);
         }
       }
-      
+
       // セッションに認証情報を直接設定
       req.session.authenticated = true;
       req.session.user = userInfo;
       req.session.tokens = result.tokens;
-      
+
       console.log('テストセッション設定完了:', userInfo);
-      
+
       res.json({
         success: true,
         message: 'セッション認証完了',
@@ -521,7 +521,7 @@ app.post('/auth/test-session', async (req, res) => {
         error: result.error
       });
     }
-    
+
   } catch (error) {
     console.error('テストセッション設定エラー:', error);
     res.status(500).json({
@@ -536,7 +536,7 @@ app.get('/auth/login-form', (req, res) => {
   const isOAuth2Flow = req.query.state && req.query.redirect_uri;
   const state = req.query.state || '';
   const redirectUri = req.query.redirect_uri || '';
-  
+
   const html = `
 <!DOCTYPE html>
 <html lang="ja">
@@ -560,36 +560,37 @@ app.get('/auth/login-form', (req, res) => {
 </head>
 <body>
     <h1>Moto Cognito認証テスト</h1>
-    
+
     <div class="info">
         <strong>テストユーザー:</strong><br>
         Email: testuser@example.com<br>
         Password: TestPass123!
         ${isOAuth2Flow ? '<br><br><strong>OAuth2認証フロー実行中</strong>' : ''}
     </div>
-    
+
     <form id="loginForm">
         <div class="form-group">
             <label for="username">ユーザー名（Email）:</label>
             <input type="email" id="username" name="username" value="testuser@example.com" required>
         </div>
-        
+
         <div class="form-group">
             <label for="password">パスワード:</label>
             <input type="password" id="password" name="password" value="TestPass123!" required>
         </div>
-        
+
         <button type="submit">ログイン</button>
         <button type="button" onclick="directSessionLogin()" style="margin-left: 10px; background: #28a745;">直接セッション設定</button>
+        <button type="button" onclick="rundeckLogin()" style="margin-left: 10px; background: #dc3545;">Rundeckログイン</button>
     </form>
-    
+
     <div id="result"></div>
-    
+
     <hr>
     <h3>設定情報</h3>
     <button onclick="loadConfig()">Cognito設定を確認</button>
     <div id="config"></div>
-    
+
     <hr>
     <h3>テスト機能</h3>
     <button onclick="testRundeckAccess()">Rundeckアクセステスト</button>
@@ -598,23 +599,23 @@ app.get('/auth/login-form', (req, res) => {
     <script>
         const isOAuth2Flow = '${isOAuth2Flow}' === 'true';
         const oauth2State = '${state}';
-        
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const resultDiv = document.getElementById('result');
-            
+
             resultDiv.innerHTML = '<div class="info">認証中...</div>';
-            
+
             try {
-                const requestBody = { 
-                    username, 
+                const requestBody = {
+                    username,
                     password,
                     oauth2_flow: isOAuth2Flow ? 'true' : 'false'
                 };
-                
+
                 const response = await fetch('/auth/login', {
                     method: 'POST',
                     headers: {
@@ -622,9 +623,9 @@ app.get('/auth/login-form', (req, res) => {
                     },
                     body: JSON.stringify(requestBody)
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     if (data.redirect && isOAuth2Flow) {
                         // OAuth2フローの場合はリダイレクト
@@ -657,15 +658,15 @@ app.get('/auth/login-form', (req, res) => {
                 \`;
             }
         });
-        
+
         async function loadConfig() {
             const configDiv = document.getElementById('config');
             configDiv.innerHTML = '<div class="info">設定情報を読み込み中...</div>';
-            
+
             try {
                 const response = await fetch('/auth/config');
                 const data = await response.json();
-                
+
                 configDiv.innerHTML = \`
                     <div class="success">
                         <pre>\${JSON.stringify(data, null, 2)}</pre>
@@ -679,15 +680,15 @@ app.get('/auth/login-form', (req, res) => {
                 \`;
             }
         }
-        
+
         // 直接セッション設定
         async function directSessionLogin() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const resultDiv = document.getElementById('result');
-            
+
             resultDiv.innerHTML = '<div class="info">直接セッション設定中...</div>';
-            
+
             try {
                 const response = await fetch('/auth/test-session', {
                     method: 'POST',
@@ -696,9 +697,9 @@ app.get('/auth/login-form', (req, res) => {
                     },
                     body: JSON.stringify({ username, password })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     resultDiv.innerHTML = \`
                         <div class="success">
@@ -722,17 +723,67 @@ app.get('/auth/login-form', (req, res) => {
                 \`;
             }
         }
-        
+
+        // Rundeckログイン
+        async function rundeckLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+
+            resultDiv.innerHTML = '<div class="info">Rundeckログイン中...認証してからRundeckに遷移します</div>';
+
+            try {
+                // 1. 認証実行
+                const authResponse = await fetch('/auth/test-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const authData = await authResponse.json();
+
+                if (authData.success) {
+                    resultDiv.innerHTML = \`
+                        <div class="success">
+                            <strong>認証成功!</strong><br>
+                            ユーザー: \${authData.user.attributes?.email}<br>
+                            Rundeckに遷移中...
+                        </div>
+                    \`;
+
+                    // 2. 認証成功後、Rundeckに遷移
+                    setTimeout(() => {
+                        window.location.href = '/rundeck/';
+                    }, 2000);
+                } else {
+                    resultDiv.innerHTML = \`
+                        <div class="error">
+                            <strong>認証失敗:</strong> \${authData.error}<br>
+                            Rundeckにアクセスできません
+                        </div>
+                    \`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = \`
+                    <div class="error">
+                        <strong>Rundeckログインエラー:</strong> \${error.message}
+                    </div>
+                \`;
+            }
+        }
+
         // Rundeckアクセステスト
         async function testRundeckAccess() {
             const testResultDiv = document.getElementById('testResult');
             testResultDiv.innerHTML = '<div class="info">Rundeckアクセステスト中...</div>';
-            
+
             try {
                 // 認証状態確認
                 const authResponse = await fetch('/user');
                 const authData = await authResponse.json();
-                
+
                 if (authData.authenticated) {
                     testResultDiv.innerHTML = \`
                         <div class="success">
@@ -761,7 +812,7 @@ app.get('/auth/login-form', (req, res) => {
 </body>
 </html>
   `;
-  
+
   res.send(html);
 });
 
