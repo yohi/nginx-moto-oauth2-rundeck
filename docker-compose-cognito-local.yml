@@ -42,10 +42,12 @@ services:
       - "4181:4180"
     environment:
       - OAUTH2_PROXY_PROVIDER=oidc
-      - OAUTH2_PROXY_OIDC_ISSUER_URL=http://cognito-local:9229/local_2JfyZzqC
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=http://backend:8080
       - OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION=true
       - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
-      - OAUTH2_PROXY_CLIENT_ID=rundeck-client
+      - OAUTH2_PROXY_SKIP_OIDC_DISCOVERY=false
+      - OAUTH2_PROXY_WHITELIST_DOMAINS=localhost:9000,localhost
+      - OAUTH2_PROXY_CLIENT_ID=6ukqb2z8xv0fd4p2ar2gp3sjl
       - OAUTH2_PROXY_CLIENT_SECRET=rundeck-client-secret
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
       - OAUTH2_PROXY_UPSTREAM=http://backend:8080
@@ -81,9 +83,10 @@ services:
     environment:
       - PORT=8080
       - COGNITO_REGION=us-east-1
-      - COGNITO_USER_POOL_ID=us-east-1_rundeck
-      - COGNITO_CLIENT_ID=rundeck-client
+      - COGNITO_USER_POOL_ID=local_6y3X7A8s
+      - COGNITO_CLIENT_ID=6ukqb2z8xv0fd4p2ar2gp3sjl
       - COGNITO_ENDPOINT=http://cognito-local:9229
+      - AWS_ENDPOINT_URL=http://cognito-local:9229
     depends_on:
       - cognito-local
     networks:
@@ -118,7 +121,7 @@ services:
   rundeck-active:
     image: rundeck/rundeck:5.14.0-20250804
     ports:
-      - "4444:4440"
+      - "14400:4440"
     environment:
       - RUNDECK_GRAILS_URL=http://localhost:9000/rundeck
       - RUNDECK_SERVER_FORWARDED=true
@@ -165,7 +168,7 @@ services:
   rundeck-standby:
     image: rundeck/rundeck:5.14.0-20250804
     ports:
-      - "4445:4440"
+      - "24440:4440"
     environment:
       - RUNDECK_GRAILS_URL=http://localhost:9000/rundeck
       - RUNDECK_SERVER_FORWARDED=true

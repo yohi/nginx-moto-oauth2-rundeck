@@ -284,7 +284,7 @@ app.get('/aws/dynamodb', async (req, res) => {
 
 // Cognito認証テストエンドポイント
 app.post('/auth/login', async (req, res) => {
-  const { username, password, oauth2_flow } = req.body;
+  const { username, password, oauth2_flow, state, redirect_uri } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({
@@ -314,12 +314,37 @@ app.post('/auth/login', async (req, res) => {
           userInfo: userInfo
         };
 
-        // OAuth2 callbackにリダイレクト
-        const state = req.session.oauth2State;
+        // stateとredirect_uriをセッションに保存（フロントエンドから送信された値を優先）
+        if (state) {
+          req.session.oauth2State = state;
+        }
+        if (redirect_uri) {
+          req.session.redirectAfterAuth = redirect_uri;
+        }
+
+        console.log('OAuth2認証 - セッション情報:', {
+          state: req.session.oauth2State,
+          redirectAfterAuth: req.session.redirectAfterAuth
+        });
+
+        // OAuth2フロー: 直接認証完了処理
+        req.session.authenticated = true;
+        req.session.user = userInfo || {
+          email: 'admin@example.com',
+          Username: 'admin@example.com',
+          given_name: 'Admin',
+          family_name: 'User'
+        };
+        req.session.tokens = result.tokens;
+
+        // 直接リダイレクト先に遷移
+        const redirectTo = redirect_uri || '/rundeck/';
+        console.log('OAuth2認証完了 - 直接リダイレクト:', redirectTo);
+
         res.json({
           success: true,
           message: 'OAuth2認証成功',
-          redirect: `/oauth2/callback?code=mock_auth_code&state=${state}`
+          redirect: redirectTo
         });
       } else {
         // 通常のAPI認証レスポンス
@@ -363,8 +388,8 @@ app.get('/auth/config', async (req, res) => {
       user_pools: userPools,
       clients: clients,
       test_user: {
-        username: 'testuser@example.com',
-        password: 'TestPass123!'
+        username: 'admin@example.com',
+        password: 'Admin123!'
       }
     });
   } catch (error) {
@@ -394,8 +419,24 @@ app.get('/oauth2/start', (req, res) => {
 
 // Cognito Hosted UI シミュレーション（運用環境準拠）
 app.get('/cognito/hosted-ui', (req, res) => {
+  console.log('=== HOSTED UI ACCESSED ===');
   const state = req.query.state;
-  const redirectUri = req.query.redirect_uri;
+  const redirectUri = req.query.redirect_uri || req.query.rd; // Nginxからの'rd'パラメータも受け入れ
+
+  console.log('Hosted UI アクセス - クエリパラメータ:', {
+    state: state,
+    redirect_uri: req.query.redirect_uri,
+    rd: req.query.rd,
+    redirectUri: redirectUri
+  });
+
+  // セッションにリダイレクト先を保存
+  if (redirectUri) {
+    req.session.redirectAfterAuth = redirectUri;
+    console.log('Hosted UI - リダイレクト先をセッションに保存:', redirectUri);
+  } else {
+    console.log('Hosted UI - リダイレクト先が指定されていません');
+  }
 
   // 実際のCognito Hosted UIのデザインを模したページ
   res.send(`
@@ -523,14 +564,17 @@ app.get('/cognito/hosted-ui', (req, res) => {
             </div>
 
             <form id="cognitoSignInForm">
+                <input type="hidden" id="state" name="state" value="${state || ''}">
+                <input type="hidden" id="redirect_uri" name="redirect_uri" value="${redirectUri || ''}">
+
                 <div class="form-group">
                     <label for="username">Email address</label>
-                    <input type="email" id="username" name="username" value="testuser@example.com" required>
+                    <input type="email" id="username" name="username" value="admin@example.com" required>
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" value="TestPass123!" required>
+                    <input type="password" id="password" name="password" value="Admin123!" required>
                 </div>
 
                 <button type="submit" class="sign-in-button">Sign in</button>
@@ -552,6 +596,10 @@ app.get('/cognito/hosted-ui', (req, res) => {
 
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
+                const state = document.getElementById('state').value;
+                const redirectUri = document.getElementById('redirect_uri').value;
+
+                console.log('認証開始:', { username, state, redirectUri });
 
                 try {
                     // Cognito認証をシミュレート
@@ -563,7 +611,9 @@ app.get('/cognito/hosted-ui', (req, res) => {
                         body: JSON.stringify({
                             username,
                             password,
-                            oauth2_flow: 'true'
+                            oauth2_flow: 'true',
+                            state: state,
+                            redirect_uri: redirectUri
                         })
                     });
 
@@ -589,7 +639,13 @@ app.get('/cognito/hosted-ui', (req, res) => {
 app.get('/oauth2/callback', async (req, res) => {
   const { code, state } = req.query;
 
-  console.log('OAuth2 Callback:', { code, state, sessionState: req.session.oauth2State });
+  console.log('OAuth2 Callback:', {
+    code,
+    state,
+    sessionState: req.session.oauth2State,
+    redirectAfterAuth: req.session.redirectAfterAuth,
+    sessionKeys: Object.keys(req.session)
+  });
 
   // State確認
   if (state && req.session.oauth2State && state !== req.session.oauth2State) {
@@ -607,11 +663,21 @@ app.get('/oauth2/callback', async (req, res) => {
 
       // セッションに認証情報を保存
       req.session.authenticated = true;
-      req.session.user = authResult.userInfo;
+      req.session.user = authResult.userInfo || {
+        email: 'admin@example.com',
+        Username: 'admin@example.com',
+        given_name: 'Admin',
+        family_name: 'User'
+      };
       req.session.tokens = authResult.tokens;
 
-      // 認証後のリダイレクト先を取得
-      const redirectTo = req.session.redirectAfterAuth || '/';
+      console.log('OAuth2コールバック - ユーザー情報保存:', {
+        hasUserInfo: !!authResult.userInfo,
+        savedUser: req.session.user
+      });
+
+      // 認証後のリダイレクト先を取得（デフォルトはRundeck）
+      const redirectTo = req.session.redirectAfterAuth || '/rundeck/';
 
       // セッション情報をクリーンアップ
       delete req.session.oauth2State;
@@ -619,6 +685,8 @@ app.get('/oauth2/callback', async (req, res) => {
       delete req.session.redirectAfterAuth;
 
       console.log('OAuth2認証成功 - リダイレクト先:', redirectTo);
+      console.log('セッション認証状態:', req.session.authenticated);
+
       res.redirect(redirectTo);
     } else {
       res.status(400).json({
@@ -644,6 +712,37 @@ app.get('/oauth2/sign_out', (req, res) => {
     }
     res.redirect('/');
   });
+});
+
+// 認証チェックエンドポイント（OAuth2 Proxy代替）
+app.get('/auth/check', (req, res) => {
+  console.log('認証チェック要求:', {
+    authenticated: !!req.session.authenticated,
+    hasUser: !!req.session.user,
+    originalURI: req.headers['x-original-uri']
+  });
+
+  if (req.session.authenticated && req.session.user) {
+    // 認証済み - Rundeck用ヘッダーを設定
+    const user = req.session.user;
+    const userEmail = user.email || user.Username || 'admin@example.com';
+
+    console.log('認証チェック成功 - ユーザー:', userEmail);
+
+    res.set({
+      'X-Auth-Request-User': userEmail,
+      'X-Auth-Request-Email': userEmail,
+      'X-Auth-Request-Given-Name': user.given_name || 'Admin',
+      'X-Auth-Request-Family-Name': user.family_name || 'User',
+      'X-Auth-Request-Roles': 'user,admin'
+    });
+
+    res.status(200).send('OK');
+  } else {
+    // 未認証 - 401を返してNginxのauth_redirectを発火
+    console.log('認証チェック失敗 - 未認証');
+    res.status(401).send('Unauthorized');
+  }
 });
 
 // 認証チェックエンドポイント（Nginx auth_request用）
@@ -1134,7 +1233,64 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404ハンドラー
+// テストエンドポイント
+app.get('/test-endpoint', (req, res) => {
+  res.json({ message: 'Test endpoint working!' });
+});
+
+// OIDC Discovery endpoint for OAuth2 Proxy compatibility
+app.get('/.well-known/openid-configuration', (req, res) => {
+  console.log('OIDC Discovery endpoint called');
+  const baseUrl = `http://backend:8080`;
+  res.json({
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth2/start`,
+    token_endpoint: `${baseUrl}/oauth2/token`,
+    userinfo_endpoint: `${baseUrl}/oauth2/userinfo`,
+    jwks_uri: `${baseUrl}/.well-known/jwks.json`,
+    response_types_supported: ["code"],
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256"],
+    scopes_supported: ["openid", "email", "profile"],
+    claims_supported: ["sub", "email", "name", "given_name", "family_name"]
+  });
+});
+
+// JWKS endpoint (dummy for OAuth2 Proxy compatibility)
+app.get('/.well-known/jwks.json', (req, res) => {
+  res.json({
+    keys: [{
+      kty: "RSA",
+      use: "sig",
+      kid: "dummy-key-id",
+      n: "dummy-modulus",
+      e: "AQAB"
+    }]
+  });
+});
+
+// OAuth2 token endpoint (dummy implementation)
+app.post('/oauth2/token', (req, res) => {
+  res.json({
+    access_token: "dummy-access-token",
+    token_type: "Bearer",
+    expires_in: 3600,
+    id_token: "dummy-id-token"
+  });
+});
+
+// OAuth2 userinfo endpoint (dummy implementation)
+app.get('/oauth2/userinfo', (req, res) => {
+  res.json({
+    sub: "admin@example.com",
+    email: "admin@example.com",
+    name: "Admin User",
+    given_name: "Admin",
+    family_name: "User"
+  });
+});
+
+// 404ハンドラー（最後に配置）
 app.use((req, res) => {
   res.status(404).json({
     error: 'エンドポイントが見つかりません',
@@ -1150,6 +1306,15 @@ app.listen(PORT, () => {
   console.log(`ポート: ${PORT}`);
   console.log(`AWS エンドポイント: ${process.env.AWS_ENDPOINT_URL || 'http://moto:5000'}`);
   console.log(`開始時間: ${new Date().toISOString()}`);
+
+  // 登録されているルートをデバッグ出力
+  console.log(`登録済みルート:`);
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      console.log(`- ${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
+    }
+  });
+
   console.log(`===========================================`);
 });
 
