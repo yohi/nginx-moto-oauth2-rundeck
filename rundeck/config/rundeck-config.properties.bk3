@@ -81,28 +81,3 @@ rundeck.storage.provider.1.type=db
 rundeck.storage.provider.1.path=keys
 
 
-rundeck.security.httpHeaders.enabled=true
-
-rundeck.security.httpHeaders.provider.cache-control.enabled=true
-
-rundeck.security.httpHeaders.provider.xcto.enabled=true
-
-rundeck.security.httpHeaders.provider.xxssp.enabled=true
-
-rundeck.security.httpHeaders.provider.xfo.enabled=true
-
-rundeck.security.httpHeaders.provider.csp.enabled=true
-
-rundeck.security.httpHeaders.provider.csp.config.include-xcsp-header=false
-
-rundeck.security.httpHeaders.provider.csp.config.include-xwkcsp-header=false
-
-
-
-
-
-
-rundeck.storage.provider.1.type=db
-rundeck.storage.provider.1.path=keys
-
-

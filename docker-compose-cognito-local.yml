@@ -1,3 +1,4 @@
+# cognito-localを使ったOAuth2認証付きRundeck HA構成
 services:
   nginx:
     image: nginx:alpine
@@ -14,10 +15,36 @@ services:
       - oauth-network
     restart: unless-stopped
 
+  # cognito-local - 本格的なAWS Cognito エミュレーター
+  cognito-local:
+    image: jagregory/cognito-local:latest
+    ports:
+      - "9229:9229"  # Cognito Local API
+    environment:
+      - HOST=0.0.0.0
+      - PORT=9229
+      - COGNITO_LOCAL_PORT=9229
+    volumes:
+      - cognito-local-data:/app/.cognito
+    networks:
+      - oauth-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9229/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # OAuth2 Proxy - cognito-local OIDC連携設定
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
     environment:
-      - OAUTH2_PROXY_PROVIDER=github
+      - OAUTH2_PROXY_PROVIDER=oidc
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=http://cognito-local:9229/local_2JfyZzqC
+      - OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION=true
+      - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
+      - OAUTH2_PROXY_CLIENT_ID=rundeck-client
+      - OAUTH2_PROXY_CLIENT_SECRET=rundeck-client-secret
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
       - OAUTH2_PROXY_UPSTREAM=http://backend:8080
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
@@ -27,34 +54,18 @@ services:
       - OAUTH2_PROXY_SET_XAUTHREQUEST=true
       - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
       - OAUTH2_PROXY_PASS_USER_HEADERS=true
-      - OAUTH2_PROXY_SCOPE=user:email
-      # GitHub OAuth用のデモ設定（実際のクライアントIDが必要）
-      - OAUTH2_PROXY_CLIENT_ID=demo_client_id
-      - OAUTH2_PROXY_CLIENT_SECRET=demo_client_secret
+      - OAUTH2_PROXY_SCOPE=openid email profile
       - OAUTH2_PROXY_COOKIE_SECRET=VHYjkHPUrFYM8w8SG3BVnCJfKxBS61JF
+      - OAUTH2_PROXY_SKIP_OIDC_DISCOVERY=false
+      - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
     depends_on:
+      - cognito-local
       - backend
     networks:
       - oauth-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4180/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  moto:
-    image: motoserver/moto:5.1.9
-    ports:
-      - "5000:5000"
-    environment:
-      - MOTO_HOST=0.0.0.0
-      - MOTO_PORT=5000
-    networks:
-      - oauth-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -67,12 +78,12 @@ services:
       - "8090:8080"
     environment:
       - PORT=8080
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-testing}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-testing}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
-      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-http://moto:5000}
+      - COGNITO_REGION=us-east-1
+      - COGNITO_USER_POOL_ID=us-east-1_rundeck
+      - COGNITO_CLIENT_ID=rundeck-client
+      - COGNITO_ENDPOINT=http://cognito-local:9229
     depends_on:
-      - moto
+      - cognito-local
     networks:
       - oauth-network
     restart: unless-stopped
@@ -81,20 +92,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  cognito-setup:
-    build:
-      context: .
-      dockerfile: cognito-setup/Dockerfile
-    depends_on:
-      - moto
-    networks:
-      - oauth-network
-    environment:
-      - AWS_ACCESS_KEY_ID=testing
-      - AWS_SECRET_ACCESS_KEY=testing
-      - AWS_DEFAULT_REGION=us-east-1
-    restart: "no"
 
   # PostgreSQL Database for Rundeck HA
   rundeck-postgres:
@@ -124,19 +121,16 @@ services:
       - RUNDECK_GRAILS_URL=http://localhost:9000/rundeck
       - RUNDECK_SERVER_FORWARDED=true
       - RUNDECK_LOGGING_STRATEGY=CONSOLE
-      # PostgreSQL Database Configuration
       - RUNDECK_DATABASE_DRIVER=org.postgresql.Driver
       - RUNDECK_DATABASE_USERNAME=rundeck
       - RUNDECK_DATABASE_PASSWORD=rundeck123
       - RUNDECK_DATABASE_URL=jdbc:postgresql://rundeck-postgres:5432/rundeck
       - RUNDECK_PLUGIN_PROVISIONING_ENABLED=true
-      # クラスター設定
       - RUNDECK_SERVER_UUID=e7dcae5b-7bbd-4169-bc44-ddd7ec0f3d1a
       - RUNDECK_QUARTZ_JOB_STORE_DELEGATE_CLASS=org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
       - RUNDECK_QUARTZ_JOB_STORE_CLASS=org.springframework.scheduling.quartz.LocalDataSourceJobStore
       - RUNDECK_QUARTZ_JOB_STORE_IS_CLUSTERED=true
       - RUNDECK_QUARTZ_JOB_STORE_CLUSTER_CHECKIN_INTERVAL=20000
-      # 運用環境準拠：プリ認証モード（Nginx経由の認証済みユーザー）
       - RUNDECK_PREAUTH_ENABLED=true
       - RUNDECK_PREAUTH_ATTRIBUTE_NAME=REMOTE_USER_EMAIL
       - RUNDECK_PREAUTH_DELIMITER=,
@@ -145,7 +139,6 @@ services:
       - RUNDECK_PREAUTH_REDIRECT_LOGOUT=http://localhost:9000/oauth2/sign_out
       - RUNDECK_PREAUTH_USER_FIRST_NAME_HEADER=X-Auth-Request-Given-Name
       - RUNDECK_PREAUTH_USER_LAST_NAME_HEADER=X-Auth-Request-Family-Name
-      # アセット配信の根本的解決設定
       - GRAILS_ASSETS_MINIFIED=false
       - GRAILS_ASSETS_PLUGIN_BOOTSTRAP_ENABLED=false
       - RUNDECK_STATIC_ASSETS_PATH=/home/rundeck/user-assets
@@ -175,19 +168,16 @@ services:
       - RUNDECK_GRAILS_URL=http://localhost:9000/rundeck
       - RUNDECK_SERVER_FORWARDED=true
       - RUNDECK_LOGGING_STRATEGY=CONSOLE
-      # PostgreSQL Database Configuration (同一DB)
       - RUNDECK_DATABASE_DRIVER=org.postgresql.Driver
       - RUNDECK_DATABASE_USERNAME=rundeck
       - RUNDECK_DATABASE_PASSWORD=rundeck123
       - RUNDECK_DATABASE_URL=jdbc:postgresql://rundeck-postgres:5432/rundeck
       - RUNDECK_PLUGIN_PROVISIONING_ENABLED=true
-      # クラスター設定（異なるUUID）
       - RUNDECK_SERVER_UUID=ffe48a7c-a882-4864-a2a3-c8842d1ed4e2
       - RUNDECK_QUARTZ_JOB_STORE_DELEGATE_CLASS=org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
       - RUNDECK_QUARTZ_JOB_STORE_CLASS=org.springframework.scheduling.quartz.LocalDataSourceJobStore
       - RUNDECK_QUARTZ_JOB_STORE_IS_CLUSTERED=true
       - RUNDECK_QUARTZ_JOB_STORE_CLUSTER_CHECKIN_INTERVAL=20000
-      # 運用環境準拠：プリ認証モード（Nginx経由の認証済みユーザー）
       - RUNDECK_PREAUTH_ENABLED=true
       - RUNDECK_PREAUTH_ATTRIBUTE_NAME=REMOTE_USER_EMAIL
       - RUNDECK_PREAUTH_DELIMITER=,
@@ -196,7 +186,6 @@ services:
       - RUNDECK_PREAUTH_REDIRECT_LOGOUT=http://localhost:9000/oauth2/sign_out
       - RUNDECK_PREAUTH_USER_FIRST_NAME_HEADER=X-Auth-Request-Given-Name
       - RUNDECK_PREAUTH_USER_LAST_NAME_HEADER=X-Auth-Request-Family-Name
-      # アセット配信の根本的解決設定
       - GRAILS_ASSETS_MINIFIED=false
       - GRAILS_ASSETS_PLUGIN_BOOTSTRAP_ENABLED=false
       - RUNDECK_STATIC_ASSETS_PATH=/home/rundeck/user-assets
@@ -217,11 +206,11 @@ services:
       retries: 5
       start_period: 60s
 
+volumes:
+  cognito-local-data:
+  rundeck-postgres-data:
+  rundeck-shared-data:
+
 networks:
   oauth-network:
     driver: bridge
-
-volumes:
-  moto-data:
-  rundeck-postgres-data:
-  rundeck-shared-data:

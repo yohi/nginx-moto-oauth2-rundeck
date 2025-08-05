@@ -1,0 +1,67 @@
+# Keycloak を使ったローカルOAuth2プロバイダー設定
+services:
+  # Keycloak Identity Provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin123
+      - KC_DB=h2
+      - KC_HOSTNAME=localhost:8080
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_RELATIVE_PATH=/
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    networks:
+      - oauth-network
+    command: start-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/master"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # OAuth2 Proxy - Keycloak用設定
+  oauth2-proxy-keycloak:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    environment:
+      - OAUTH2_PROXY_PROVIDER=oidc
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=http://keycloak:8080/realms/rundeck
+      - OAUTH2_PROXY_CLIENT_ID=rundeck-client
+      - OAUTH2_PROXY_CLIENT_SECRET=rundeck-secret-key
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      - OAUTH2_PROXY_UPSTREAM=http://backend:8080
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_REDIRECT_URL=http://localhost:9000/oauth2/callback
+      - OAUTH2_PROXY_COOKIE_SECURE=false
+      - OAUTH2_PROXY_COOKIE_HTTPONLY=true
+      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
+      - OAUTH2_PROXY_PASS_USER_HEADERS=true
+      - OAUTH2_PROXY_SCOPE=openid email profile
+      - OAUTH2_PROXY_COOKIE_SECRET=VHYjkHPUrFYM8w8SG3BVnCJfKxBS61JF
+      - OAUTH2_PROXY_SKIP_OIDC_DISCOVERY=false
+      - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
+    depends_on:
+      - keycloak
+      - backend
+    networks:
+      - oauth-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4180/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  keycloak-data:
+
+networks:
+  oauth-network:
+    driver: bridge

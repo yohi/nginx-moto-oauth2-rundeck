@@ -15,10 +15,10 @@ rundeck.multiURL.enabled=false
 server.servlet.session.timeout=3600
 
 
-dataSource.url = jdbc:postgresql://rundeck-postgres:5432/rundeck
+dataSource.url = jdbc:h2:mem:rundeckdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
 dataSource.username = rundeck
-dataSource.password = rundeck123
-    dataSource.driverClassName = org.postgresql.Driver
+dataSource.password = rundeck
+    dataSource.driverClassName = org.h2.Driver
 
 
 #Pre Auth mode settings
@@ -54,31 +54,6 @@ rundeck.metrics.enabled=false
 rundeck.metrics.jmxEnabled=false
 
 
-
-
-rundeck.security.httpHeaders.enabled=true
-
-rundeck.security.httpHeaders.provider.cache-control.enabled=true
-
-rundeck.security.httpHeaders.provider.xcto.enabled=true
-
-rundeck.security.httpHeaders.provider.xxssp.enabled=true
-
-rundeck.security.httpHeaders.provider.xfo.enabled=true
-
-rundeck.security.httpHeaders.provider.csp.enabled=true
-
-rundeck.security.httpHeaders.provider.csp.config.include-xcsp-header=false
-
-rundeck.security.httpHeaders.provider.csp.config.include-xwkcsp-header=false
-
-
-
-
-
-
-rundeck.storage.provider.1.type=db
-rundeck.storage.provider.1.path=keys
 
 
 rundeck.security.httpHeaders.enabled=true
