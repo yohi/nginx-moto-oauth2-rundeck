@@ -38,6 +38,8 @@ services:
   # OAuth2 Proxy - cognito-local OIDC連携設定
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    ports:
+      - "4181:4180"
     environment:
       - OAUTH2_PROXY_PROVIDER=oidc
       - OAUTH2_PROXY_OIDC_ISSUER_URL=http://cognito-local:9229/local_2JfyZzqC
