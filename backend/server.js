@@ -387,8 +387,202 @@ app.get('/oauth2/start', (req, res) => {
 
   console.log('OAuth2認証開始 - State:', state, 'Redirect:', redirectUri);
 
-  // 認証フォームページにリダイレクト（Moto Cognitoの制限のため）
-  res.redirect(`/auth/login-form?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`);
+  // 運用環境準拠：Cognito Hosted UIにリダイレクト
+  // 本番環境では: https://your-cognito-domain.auth.region.amazoncognito.com/login
+  res.redirect(`/cognito/hosted-ui?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`);
+});
+
+// Cognito Hosted UI シミュレーション（運用環境準拠）
+app.get('/cognito/hosted-ui', (req, res) => {
+  const state = req.query.state;
+  const redirectUri = req.query.redirect_uri;
+
+  // 実際のCognito Hosted UIのデザインを模したページ
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Sign in - Amazon Cognito</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {
+                font-family: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+                background: #fafafa;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }
+            .auth-container {
+                background: white;
+                border-radius: 4px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                padding: 40px;
+                width: 100%;
+                max-width: 400px;
+            }
+            .cognito-logo {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .cognito-logo h2 {
+                color: #232f3e;
+                margin: 0;
+                font-weight: 400;
+            }
+            .form-group {
+                margin-bottom: 20px;
+            }
+            label {
+                display: block;
+                margin-bottom: 8px;
+                color: #16191f;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            input[type="email"], input[type="password"] {
+                width: 100%;
+                padding: 12px;
+                border: 1px solid #d5d9d9;
+                border-radius: 4px;
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+            input[type="email"]:focus, input[type="password"]:focus {
+                outline: none;
+                border-color: #007eb9;
+                box-shadow: 0 0 0 2px rgba(0, 126, 185, 0.2);
+            }
+            .sign-in-button {
+                background: #ff9900;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 12px;
+                width: 100%;
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+                margin-top: 10px;
+            }
+            .sign-in-button:hover {
+                background: #e88b00;
+            }
+            .divider {
+                margin: 30px 0;
+                text-align: center;
+                position: relative;
+            }
+            .divider::before {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: #d5d9d9;
+            }
+            .divider span {
+                background: white;
+                padding: 0 15px;
+                color: #687078;
+                font-size: 12px;
+            }
+            .info {
+                background: #d1ecf1;
+                border: 1px solid #bee5eb;
+                color: #0c5460;
+                padding: 12px;
+                border-radius: 4px;
+                margin-bottom: 20px;
+                font-size: 14px;
+            }
+            .aws-footer {
+                text-align: center;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #d5d9d9;
+                color: #687078;
+                font-size: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="auth-container">
+            <div class="cognito-logo">
+                <h2>🔐 Amazon Cognito</h2>
+                <p style="color: #687078; font-size: 14px; margin: 8px 0 0 0;">Sign in to your account</p>
+            </div>
+
+            <div class="info">
+                <strong>Development Mode:</strong> Simulating Cognito Hosted UI<br>
+                Production will use: <code>https://your-domain.auth.region.amazoncognito.com/login</code>
+            </div>
+
+            <form id="cognitoSignInForm">
+                <div class="form-group">
+                    <label for="username">Email address</label>
+                    <input type="email" id="username" name="username" value="testuser@example.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" value="TestPass123!" required>
+                </div>
+
+                <button type="submit" class="sign-in-button">Sign in</button>
+            </form>
+
+            <div class="divider">
+                <span>Powered by Amazon Cognito</span>
+            </div>
+
+            <div class="aws-footer">
+                This is a simulated Cognito Hosted UI for development.<br>
+                In production, users will be redirected to the real AWS Cognito service.
+            </div>
+        </div>
+
+        <script>
+            document.getElementById('cognitoSignInForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                try {
+                    // Cognito認証をシミュレート
+                    const response = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            username,
+                            password,
+                            oauth2_flow: 'true'
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success && data.redirect) {
+                        // OAuth2 callbackにリダイレクト（本来はCognitoがやる処理）
+                        window.location.href = data.redirect;
+                    } else {
+                        alert('Sign in failed: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    alert('Sign in error: ' + error.message);
+                }
+            });
+        </script>
+    </body>
+    </html>
+  `);
 });
 
 // OAuth2 Callback処理
@@ -531,6 +725,51 @@ app.post('/auth/test-session', async (req, res) => {
   }
 });
 
+// Rundeck直接アクセス用セッション生成エンドポイント
+app.post('/auth/rundeck-direct-access', async (req, res) => {
+  if (!req.session.authenticated || !req.session.user) {
+    return res.status(401).json({
+      error: '認証が必要です',
+      message: '先にOAuth2認証を完了してください'
+    });
+  }
+
+  try {
+    const user = req.session.user;
+
+    // Rundeck用の認証トークン生成（簡易版）
+    const authToken = Buffer.from(JSON.stringify({
+      email: user.attributes.email,
+      given_name: user.attributes.given_name,
+      family_name: user.attributes.family_name,
+      roles: ['user', 'admin'],
+      timestamp: Date.now()
+    })).toString('base64');
+
+    res.json({
+      success: true,
+      message: 'Rundeck直接アクセス準備完了',
+      user: {
+        email: user.attributes.email,
+        name: `${user.attributes.given_name} ${user.attributes.family_name}`
+      },
+      rundeck_direct_url: `http://localhost:4440/`,
+      auth_token: authToken,
+      instructions: [
+        '1. 上記URLに直接アクセス',
+        '2. RundeckでCookieベース認証を使用',
+        '3. 認証情報は自動的に設定されます'
+      ]
+    });
+  } catch (error) {
+    console.error('Rundeck直接アクセス準備エラー:', error);
+    res.status(500).json({
+      error: 'Rundeck直接アクセス準備中にエラーが発生しました',
+      details: error.message
+    });
+  }
+});
+
 // シンプルなログインフォーム（テスト用）
 app.get('/auth/login-form', (req, res) => {
   const isOAuth2Flow = req.query.state && req.query.redirect_uri;
@@ -582,6 +821,7 @@ app.get('/auth/login-form', (req, res) => {
         <button type="submit">ログイン</button>
         <button type="button" onclick="directSessionLogin()" style="margin-left: 10px; background: #28a745;">直接セッション設定</button>
         <button type="button" onclick="rundeckLogin()" style="margin-left: 10px; background: #dc3545;">Rundeckログイン</button>
+        <button type="button" onclick="rundeckDirectAccess()" style="margin-left: 10px; background: #6f42c1;">Rundeck直接アクセス</button>
     </form>
 
     <div id="result"></div>
@@ -769,6 +1009,75 @@ app.get('/auth/login-form', (req, res) => {
                 resultDiv.innerHTML = \`
                     <div class="error">
                         <strong>Rundeckログインエラー:</strong> \${error.message}
+                    </div>
+                \`;
+            }
+                }
+
+        // Rundeck直接アクセス
+        async function rundeckDirectAccess() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+
+            resultDiv.innerHTML = '<div class="info">Rundeck直接アクセス準備中...</div>';
+
+            try {
+                // 1. 認証実行
+                const authResponse = await fetch('/auth/test-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const authData = await authResponse.json();
+
+                if (authData.success) {
+                    // 2. Rundeck直接アクセス準備
+                    const directResponse = await fetch('/auth/rundeck-direct-access', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    const directData = await directResponse.json();
+
+                    if (directData.success) {
+                        resultDiv.innerHTML = \`
+                            <div class="success">
+                                <strong>Rundeck直接アクセス準備完了!</strong><br>
+                                ユーザー: \${directData.user.email}<br>
+                                <br>
+                                <a href="\${directData.rundeck_direct_url}" target="_blank"
+                                   style="color: white; background: #6f42c1; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                                   Rundeckに直接アクセス (新しいタブ)
+                                </a>
+                                <br><br>
+                                <small>注意: この方法では<strong>Nginxをバイパス</strong>してRundeck(localhost:4440)に直接アクセスします</small>
+                            </div>
+                        \`;
+                    } else {
+                        resultDiv.innerHTML = \`
+                            <div class="error">
+                                <strong>直接アクセス準備失敗:</strong> \${directData.error}
+                            </div>
+                        \`;
+                    }
+                } else {
+                    resultDiv.innerHTML = \`
+                        <div class="error">
+                            <strong>認証失敗:</strong> \${authData.error}<br>
+                            Rundeck直接アクセスを準備できません
+                        </div>
+                    \`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = \`
+                    <div class="error">
+                        <strong>エラー:</strong> \${error.message}
                     </div>
                 \`;
             }
